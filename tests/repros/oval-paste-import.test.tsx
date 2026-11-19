@@ -4,7 +4,18 @@ import { getTestFixture } from "tests/fixtures/get-test-fixture"
 import usbFootprint from "./assets/usb1046/footprint.circuit.json"
 
 const { circuit } = getTestFixture({
-  platform: { placementDrcChecksDisabled: true },
+  platform: {
+    placementDrcChecksDisabled: true,
+    resolveProjectStaticFileImportUrl: async () =>
+      "https://example.com/USB_A_Receptacle_GCT_USB1046.kicad_mod",
+    footprintFileParserMap: {
+      kicad_mod: {
+        loadFromUrl: async () => ({
+          footprintCircuitJson: any_circuit_element.array().parse(usbFootprint),
+        }),
+      },
+    },
+  },
 })
 
 beforeAll(async () => {
@@ -16,7 +27,7 @@ beforeAll(async () => {
         isSmt={false}
         noConnect={["SHIELD"]}
         pcbY={-7.55}
-        footprint={any_circuit_element.array().parse(usbFootprint)}
+        footprint="./USB_A_Receptacle_GCT_USB1046.kicad_mod"
         pinLabels={{
           pin1: "VBUS",
           pin2: "DM",
