@@ -13,6 +13,7 @@ beforeAll(async () => {
       <connector
         name="J1"
         manufacturerPartNumber="USB1046"
+        isSmt={false}
         noConnect={["SHIELD"]}
         pcbY={-7.55}
         footprint={any_circuit_element.array().parse(usbFootprint)}

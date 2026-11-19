@@ -553,5 +553,49 @@
     "width": 1.2,
     "height": 2.9,
     "layer": "top"
+  },
+  {
+    "type": "pcb_solder_paste",
+    "pcb_solder_paste_id": "pcb_solder_paste_2",
+    "pcb_component_id": "pcb_component_0",
+    "shape": "rect",
+    "x": -3.5,
+    "y": 7.25,
+    "width": 1.3,
+    "height": 3,
+    "layer": "top"
+  },
+  {
+    "type": "pcb_solder_paste",
+    "pcb_solder_paste_id": "pcb_solder_paste_3",
+    "pcb_component_id": "pcb_component_0",
+    "shape": "rect",
+    "x": -1,
+    "y": 7.25,
+    "width": 1.3,
+    "height": 3,
+    "layer": "top"
+  },
+  {
+    "type": "pcb_solder_paste",
+    "pcb_solder_paste_id": "pcb_solder_paste_4",
+    "pcb_component_id": "pcb_component_0",
+    "shape": "rect",
+    "x": 1,
+    "y": 7.25,
+    "width": 1.3,
+    "height": 3,
+    "layer": "top"
+  },
+  {
+    "type": "pcb_solder_paste",
+    "pcb_solder_paste_id": "pcb_solder_paste_5",
+    "pcb_component_id": "pcb_component_0",
+    "shape": "rect",
+    "x": 3.5,
+    "y": 7.25,
+    "width": 1.3,
+    "height": 3,
+    "layer": "top"
   }
 ]
