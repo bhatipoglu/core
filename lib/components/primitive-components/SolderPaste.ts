@@ -1,12 +1,16 @@
+import { getBoundsFromPoints } from "@tscircuit/math-utils"
 import { type SolderPasteProps, solderPasteProps } from "@tscircuit/props"
 import type {
   AnyCircuitElement,
   PcbSolderPaste,
   PcbSolderPasteCircle,
+  PcbSolderPasteOval,
+  PcbSolderPastePolygon,
   PcbSolderPasteRect,
   PcbSolderPasteRotatedRect,
 } from "circuit-json"
-import { applyToPoint, decomposeTSR } from "transformation-matrix"
+import { transformPcbSolderPasteOval } from "lib/utils/pcb/transform-pcb-solder-paste-oval"
+import { applyToPoint, decomposeTSR, translate } from "transformation-matrix"
 import { PrimitiveComponent } from "../base-components/PrimitiveComponent"
 
 type PcbSolderPasteId = PcbSolderPaste["pcb_solder_paste_id"]
@@ -14,6 +18,8 @@ type StandalonePcbSolderPaste =
   | PcbSolderPasteCircle
   | PcbSolderPasteRect
   | PcbSolderPasteRotatedRect
+  | PcbSolderPasteOval
+  | PcbSolderPastePolygon
 
 export const isStandalonePcbSolderPaste = (
   element: AnyCircuitElement,
@@ -22,7 +28,9 @@ export const isStandalonePcbSolderPaste = (
   !element.pcb_smtpad_id &&
   (element.shape === "circle" ||
     element.shape === "rect" ||
-    element.shape === "rotated_rect")
+    element.shape === "rotated_rect" ||
+    element.shape === "oval" ||
+    element.shape === "polygon")
 
 /**
  * Emits independent paste apertures in the right-handed board-world PCB frame:
@@ -32,6 +40,8 @@ export const isStandalonePcbSolderPaste = (
 export class SolderPaste extends PrimitiveComponent<typeof solderPasteProps> {
   pcb_solder_paste_id: PcbSolderPasteId | null = null
   isPcbPrimitive = true
+  private importedOval = false
+  private importedPolygon?: Pick<PcbSolderPastePolygon, "points" | "holes">
 
   /**
    * Reconstruct an aperture already in its parent's local PCB frame (+X right,
@@ -39,6 +49,31 @@ export class SolderPaste extends PrimitiveComponent<typeof solderPasteProps> {
    * is in CCW degrees; coordinate transforms happen before this import.
    */
   static fromCircuitJson(aperture: StandalonePcbSolderPaste): SolderPaste {
+    if (aperture.shape === "polygon") {
+      const bounds = getBoundsFromPoints(aperture.points)!
+      const center = {
+        x: (bounds.minX + bounds.maxX) / 2,
+        y: (bounds.minY + bounds.maxY) / 2,
+      }
+      const toApertureLocal = translate(-center.x, -center.y)
+      const paste = new SolderPaste({
+        shape: "rect",
+        width: bounds.maxX - bounds.minX,
+        height: bounds.maxY - bounds.minY,
+        pcbX: center.x,
+        pcbY: center.y,
+        layer: aperture.layer,
+      })
+      paste.importedPolygon = {
+        points: aperture.points.map((point) =>
+          applyToPoint(toApertureLocal, point),
+        ),
+        holes: aperture.holes?.map((hole) =>
+          hole.map((point) => applyToPoint(toApertureLocal, point)),
+        ),
+      }
+      return paste
+    }
     const placement = {
       pcbX: aperture.x,
       pcbY: aperture.y,
@@ -57,7 +92,9 @@ export class SolderPaste extends PrimitiveComponent<typeof solderPasteProps> {
           aperture.shape === "rotated_rect" ? aperture.ccw_rotation : undefined,
       }
     }
-    return new SolderPaste(props)
+    const paste = new SolderPaste(props)
+    paste.importedOval = aperture.shape === "oval"
+    return paste
   }
 
   get config() {
@@ -93,7 +130,6 @@ export class SolderPaste extends PrimitiveComponent<typeof solderPasteProps> {
     const rotation =
       (decomposeTSR(transform, false, isFlipped).rotation.angle * 180) / Math.PI
     const base = {
-      ...center,
       layer: maybeFlipLayer(authoredLayer) as "top" | "bottom",
       pcb_component_id:
         this.parent?.pcb_component_id ??
@@ -103,15 +139,36 @@ export class SolderPaste extends PrimitiveComponent<typeof solderPasteProps> {
       subcircuit_id: this.getSubcircuit().subcircuit_id ?? undefined,
     }
     let aperture: PcbSolderPaste
-    if (props.shape === "circle") {
+    if (this.importedPolygon) {
       aperture = db.pcb_solder_paste.insert({
         ...base,
+        shape: "polygon",
+        points: this.importedPolygon.points.map((point) =>
+          applyToPoint(transform, point),
+        ),
+        holes: this.importedPolygon.holes?.map((hole) =>
+          hole.map((point) => applyToPoint(transform, point)),
+        ),
+      })
+    } else if (this.importedOval && props.shape === "rect") {
+      aperture = db.pcb_solder_paste.insert({
+        ...base,
+        ...transformPcbSolderPasteOval(
+          { x: 0, y: 0, width: props.width, height: props.height },
+          transform,
+        ),
+      })
+    } else if (props.shape === "circle") {
+      aperture = db.pcb_solder_paste.insert({
+        ...base,
+        ...center,
         shape: "circle",
         radius: props.radius,
       })
     } else if (Math.abs(rotation) < 1e-8) {
       aperture = db.pcb_solder_paste.insert({
         ...base,
+        ...center,
         shape: "rect",
         width: props.width,
         height: props.height,
@@ -119,6 +176,7 @@ export class SolderPaste extends PrimitiveComponent<typeof solderPasteProps> {
     } else {
       aperture = db.pcb_solder_paste.insert({
         ...base,
+        ...center,
         shape: "rotated_rect",
         ccw_rotation: rotation,
         width: props.width,
@@ -134,14 +192,21 @@ export class SolderPaste extends PrimitiveComponent<typeof solderPasteProps> {
   }: { deltaX: number; deltaY: number }): void {
     if (!this.pcb_solder_paste_id) return
     const { db } = this.root!
-    // This primitive only emits centered circle/rectangle records.
-    const aperture = db.pcb_solder_paste.get(
+    const aperture = db.pcb_solder_paste.get(this.pcb_solder_paste_id)!
+    const movement = translate(deltaX, deltaY)
+    db.pcb_solder_paste.update(
       this.pcb_solder_paste_id,
-    )! as StandalonePcbSolderPaste
-    db.pcb_solder_paste.update(this.pcb_solder_paste_id, {
-      x: aperture.x + deltaX,
-      y: aperture.y + deltaY,
-    })
+      aperture.shape === "polygon"
+        ? {
+            points: aperture.points.map((point) =>
+              applyToPoint(movement, point),
+            ),
+            holes: aperture.holes?.map((hole) =>
+              hole.map((point) => applyToPoint(movement, point)),
+            ),
+          }
+        : { x: aperture.x + deltaX, y: aperture.y + deltaY },
+    )
   }
 
   removePcbPrimitiveRender(): void {

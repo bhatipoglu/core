@@ -4,6 +4,7 @@ import type { PcbComponent } from "circuit-json"
 import type { PrimitiveComponent } from "lib/components/base-components/PrimitiveComponent"
 import { createComponentsFromCircuitJson } from "lib/utils/createComponentsFromCircuitJson"
 import { compose, inverse, rotate, translate } from "transformation-matrix"
+import { transformPcbSolderPasteOval } from "./pcb/transform-pcb-solder-paste-oval"
 
 /**
  * Extracts PCB primitive components (pads, holes, silkscreen, etc.) from circuit JSON
@@ -47,11 +48,33 @@ export const extractPcbPrimitivesFromCircuitJson = ({
 
   const clonedRelativeElements = structuredClone(relativeElements)
 
-  // Transform all PCB elements using the standard transformation utility
+  // Board-world -> footprint-local, right-handed mm (+X right, +Y top, +Z above).
+  // The general utility moves oval centers but does not transform their axes.
+  const standardTransformElements = clonedRelativeElements.filter(
+    (elm) =>
+      !(
+        elm.type === "pcb_solder_paste" &&
+        elm.shape === "oval" &&
+        !elm.pcb_smtpad_id
+      ),
+  )
   transformPCBElements(
-    clonedRelativeElements,
+    standardTransformElements,
     absoluteToComponentRelativeTransform,
   )
+  const transformedRelativeElements = clonedRelativeElements.map((elm) => {
+    if (
+      elm.type !== "pcb_solder_paste" ||
+      elm.shape !== "oval" ||
+      elm.pcb_smtpad_id
+    )
+      return elm
+    const { x, y, width, height, shape, ...metadata } = elm
+    return {
+      ...metadata,
+      ...transformPcbSolderPasteOval(elm, absoluteToComponentRelativeTransform),
+    }
+  })
 
   return createComponentsFromCircuitJson(
     {
@@ -60,6 +83,6 @@ export const extractPcbPrimitivesFromCircuitJson = ({
       // Rendered footprints must retain missing apertures as well as geometry.
       preserveSolderPaste: true,
     },
-    clonedRelativeElements,
+    transformedRelativeElements,
   )
 }

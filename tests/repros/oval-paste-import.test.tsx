@@ -84,7 +84,7 @@ beforeAll(async () => {
   )
 })
 
-test.failing("USB1046 import retains both mounting-tab paste apertures", () => {
+test("USB1046 import retains both mounting-tab paste apertures", () => {
   const connector = circuit.selectOne(".J1")!
   const apertures = circuit.db.pcb_solder_paste
     .list()
