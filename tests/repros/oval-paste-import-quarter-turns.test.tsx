@@ -87,7 +87,7 @@ const placements = [
     width: 0.6,
     height: 1.1,
   },
-]
+] as const
 const { circuit } = getTestFixture()
 
 beforeAll(async () => {

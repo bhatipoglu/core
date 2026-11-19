@@ -18,7 +18,7 @@ const regulators = [
     x: 9,
     layer: "bottom",
   },
-]
+] as const
 
 beforeAll(async () => {
   circuit.add(
