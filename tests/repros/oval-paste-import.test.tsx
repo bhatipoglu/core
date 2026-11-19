@@ -49,9 +49,27 @@ beforeAll(async () => {
       .filter((element) => element.type.endsWith("error")),
   ).toEqual([])
   await expect(circuit).toMatchPcbSnapshot(import.meta.path, {
-    showSolderPaste: true,
+    showSolderPaste: false,
     showFabricationNotes: false,
   })
+  const stencil = circuit
+    .getCircuitJson()
+    .filter((element) =>
+      [
+        "pcb_board",
+        "pcb_solder_paste",
+        "pcb_silkscreen_path",
+        "pcb_silkscreen_text",
+        "pcb_note_text",
+      ].includes(element.type),
+    )
+  await expect(stencil).toMatchPcbSnapshot(
+    import.meta.path.replace(".test.tsx", "-stencil.test.tsx"),
+    {
+      showSolderPaste: true,
+      showFabricationNotes: false,
+    },
+  )
 })
 
 test.failing("USB1046 import retains both mounting-tab paste apertures", () => {
